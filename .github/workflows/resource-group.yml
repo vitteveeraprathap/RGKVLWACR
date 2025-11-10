@@ -1,0 +1,40 @@
+name: Deploy Resource Group
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment (dev/uat/sbx/prd)'
+        required: true
+        type: choice
+        options: 
+          - dev
+          - uat
+          - sbx
+          - prd
+        default: dev
+
+jobs:
+  deploy-resource-group:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Validate Bicep template
+        run: |
+          az bicep build --file infra/resource-group/resource-group.bicep
+      
+      - name: Deploy Resource Group
+        run: |
+          az deployment sub create \
+            --location westus2 \
+            --template-file infra/resource-group/resource-group.bicep \
+            --parameters @"infra/resource-group/resource-group-${{ github.event.inputs.environment }}.parameters.json" \
+            --verbose

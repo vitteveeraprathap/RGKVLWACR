@@ -1,0 +1,57 @@
+name: Deploy Container Registry
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment (dev/uat/sbx/prd)'
+        required: true
+        type: choice
+        options: 
+          - dev
+          - uat
+          - sbx
+          - prd
+        default: dev
+
+jobs:
+  deploy-acr:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Determine Resource Group name
+        id: set-rg
+        run: |
+          ENV="${{ github.event.inputs.environment }}"
+          if [ "$ENV" = "dev" ]; then 
+            RG_NAME="${{ secrets.RESOURCE_GROUP_DEV }}"
+          elif [ "$ENV" = "uat" ]; then 
+            RG_NAME="${{ secrets.RESOURCE_GROUP_UAT }}"
+          elif [ "$ENV" = "sbx" ]; then 
+            RG_NAME="${{ secrets.RESOURCE_GROUP_SBX }}"
+          elif [ "$ENV" = "prd" ]; then 
+            RG_NAME="${{ secrets.RESOURCE_GROUP_PRD }}"
+          fi
+          echo "rgName=$RG_NAME" >> "$GITHUB_OUTPUT"
+          echo "Deploying to Resource Group: $RG_NAME"
+        shell: bash
+      
+      - name: Validate Bicep template
+        run: |
+          az bicep build --file infra/container-registry/container-registry.bicep
+      
+      - name: Deploy Container Registry
+        run: |
+          az deployment group create \
+            --resource-group "${{ steps.set-rg.outputs.rgName }}" \
+            --template-file infra/container-registry/container-registry.bicep \
+            --parameters @"infra/container-registry/container-registry-${{ github.event.inputs.environment }}.parameters.json" \
+            --verbose
