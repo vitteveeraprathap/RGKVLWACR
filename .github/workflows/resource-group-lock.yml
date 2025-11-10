@@ -46,12 +46,12 @@ jobs:
       
       - name: Validate Bicep template
         run: |
-          az bicep build --file infra/resource-group-lock/resource-group-lock.bicep
+          az bicep build --file infra/resource-group-lock-creation/resource-group-lock.bicep
       
       - name: Deploy Resource Group Lock
         run: |
           az deployment group create \
             --resource-group "${{ steps.set-rg.outputs.rgName }}" \
-            --template-file infra/resource-group-lock/resource-group-lock.bicep \
-            --parameters @"infra/resource-group-lock/resource-group-lock-${{ github.event.inputs.environment }}.parameters.json" \
+            --template-file infra/resource-group-lock-creation/resource-group-lock.bicep \
+            --parameters @"infra/resource-group-lock-creation/resource-group-lock-${{ github.event.inputs.environment }}.parameters.json" \
             --verbose

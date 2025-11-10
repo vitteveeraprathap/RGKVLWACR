@@ -46,12 +46,12 @@ jobs:
       
       - name: Validate Bicep template
         run: |
-          az bicep build --file infra/container-registry/container-registry.bicep
+          az bicep build --file infra/container-registry-creation/container-registry.bicep
       
       - name: Deploy Container Registry
         run: |
           az deployment group create \
             --resource-group "${{ steps.set-rg.outputs.rgName }}" \
-            --template-file infra/container-registry/container-registry.bicep \
-            --parameters @"infra/container-registry/container-registry-${{ github.event.inputs.environment }}.parameters.json" \
+            --template-file infra/container-registry-creation/container-registry.bicep \
+            --parameters @"infra/container-registry-creation/container-registry-${{ github.event.inputs.environment }}.parameters.json" \
             --verbose
