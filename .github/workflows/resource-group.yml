@@ -35,13 +35,13 @@ jobs:
       - name: Bicep Lint
         run: |
           echo "::group::Running Bicep Linter"
-          az bicep lint --file infra/resource-group/resource-group.bicep
+          az bicep lint --file infra/resource-group-creation/resource-group.bicep
           echo "::endgroup::"
       
       - name: Validate Bicep template
         run: |
           echo "::group::Building Bicep Template"
-          az bicep build --file infra/resource-group/resource-group.bicep
+          az bicep build --file infra/resource-group-creation/resource-group.bicep
           echo "::endgroup::"
       
       - name: What-If Analysis
@@ -50,8 +50,8 @@ jobs:
           echo "::group::Running What-If Analysis"
           az deployment sub what-if \
             --location westus2 \
-            --template-file infra/resource-group/resource-group.bicep \
-            --parameters @"infra/resource-group/resource-group-${{ github.event.inputs.environment }}.parameters.json" \
+            --template-file infra/resource-group-creation/resource-group.bicep \
+            --parameters @"infra/resource-group-creation/resource-group-${{ github.event.inputs.environment }}.parameters.json" \
             --result-format FullResourcePayloads
           echo "::endgroup::"
       
@@ -61,8 +61,8 @@ jobs:
           echo "::group::Deploying Resource Group"
           DEPLOYMENT_OUTPUT=$(az deployment sub create \
             --location westus2 \
-            --template-file infra/resource-group/resource-group.bicep \
-            --parameters @"infra/resource-group/resource-group-${{ github.event.inputs.environment }}.parameters.json" \
+            --template-file infra/resource-group-creation/resource-group.bicep \
+            --parameters @"infra/resource-group-creation/resource-group-${{ github.event.inputs.environment }}.parameters.json" \
             --query 'properties.outputs.resourceGroupName.value' \
             --output tsv \
             --verbose)
