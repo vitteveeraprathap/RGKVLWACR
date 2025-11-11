@@ -13,11 +13,6 @@ on:
           - sbx
           - prd
         default: dev
-      skip_whatif:
-        description: "Skip what-if analysis"
-        required: false
-        default: false
-        type: boolean
 
 jobs:
   deploy-rg-lock:
@@ -62,7 +57,6 @@ jobs:
           echo "::endgroup::"
       
       - name: What-If Analysis
-        if: ${{ !inputs.skip_whatif }}
         run: |
           echo "::group::Running What-If Analysis"
           az deployment group what-if \
@@ -83,14 +77,3 @@ jobs:
             --verbose
           echo "Lock deployed on: ${{ steps.set-rg.outputs.rgName }}"
           echo "::endgroup::"
-      
-      - name: Display Deployment Summary
-        run: |
-          echo "### Deployment Summary " >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Environment** | ${{ github.event.inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Resource Group** | ${{ steps.set-rg.outputs.rgName }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Lock Applied** | ✅ CanNotDelete |" >> $GITHUB_STEP_SUMMARY
-          echo "| **What-If Run** | ${{ inputs.skip_whatif && '❌ Skipped' || '✅ Executed' }} |" >> $GITHUB_STEP_SUMMARY
