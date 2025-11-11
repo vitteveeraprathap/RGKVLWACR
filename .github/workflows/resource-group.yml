@@ -1,5 +1,4 @@
 name: Deploy Resource Group BTT
-
 on:
   workflow_dispatch:
     inputs:
@@ -13,11 +12,6 @@ on:
           - sbx
           - prd
         default: dev
-      skip_whatif:
-        description: "Skip what-if analysis"
-        required: false
-        default: false
-        type: boolean
 
 jobs:
   deploy-resource-group:
@@ -45,7 +39,6 @@ jobs:
           echo "::endgroup::"
       
       - name: What-If Analysis
-        if: ${{ !inputs.skip_whatif }}
         run: |
           echo "::group::Running What-If Analysis"
           az deployment sub what-if \
@@ -70,14 +63,3 @@ jobs:
           echo "resourceGroupName=$DEPLOYMENT_OUTPUT" >> "$GITHUB_OUTPUT"
           echo "Resource Group deployed: $DEPLOYMENT_OUTPUT"
           echo "::endgroup::"
-      
-      - name: Display Deployment Summary
-        run: |
-          echo "### Deployment Summary " >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Environment** | ${{ github.event.inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Resource Group** | ${{ steps.deploy-rg.outputs.resourceGroupName }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Location** | westus2 |" >> $GITHUB_STEP_SUMMARY
-          echo "| **What-If Run** | ${{ inputs.skip_whatif && '❌ Skipped' || '✅ Executed' }} |" >> $GITHUB_STEP_SUMMARY
