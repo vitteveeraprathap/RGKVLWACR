@@ -52,13 +52,13 @@ jobs:
       - name: Bicep Lint
         run: |
           echo "::group::Running Bicep Linter"
-          az bicep lint --file infra/container-registry/container-registry.bicep
+          az bicep lint --file infra/container-registry-creation/container-registry.bicep
           echo "::endgroup::"
       
       - name: Validate Bicep template
         run: |
           echo "::group::Building Bicep Template"
-          az bicep build --file infra/container-registry/container-registry.bicep
+          az bicep build --file infra/container-registry-creation/container-registry.bicep
           echo "::endgroup::"
       
       - name: What-If Analysis
@@ -67,8 +67,8 @@ jobs:
           echo "::group::Running What-If Analysis"
           az deployment group what-if \
             --resource-group "${{ steps.set-rg.outputs.rgName }}" \
-            --template-file infra/container-registry/container-registry.bicep \
-            --parameters @"infra/container-registry/container-registry-${{ github.event.inputs.environment }}.parameters.json" \
+            --template-file infra/container-registry-creation/container-registry.bicep \
+            --parameters @"infra/container-registry-creation/container-registry-${{ github.event.inputs.environment }}.parameters.json" \
             --result-format FullResourcePayloads
           echo "::endgroup::"
       
@@ -78,8 +78,8 @@ jobs:
           echo "::group::Deploying Container Registry"
           DEPLOYMENT_OUTPUT=$(az deployment group create \
             --resource-group "${{ steps.set-rg.outputs.rgName }}" \
-            --template-file infra/container-registry/container-registry.bicep \
-            --parameters @"infra/container-registry/container-registry-${{ github.event.inputs.environment }}.parameters.json" \
+            --template-file infra/container-registry-creation/container-registry.bicep \
+            --parameters @"infra/container-registry-creation/container-registry-${{ github.event.inputs.environment }}.parameters.json" \
             --query 'properties.outputs.acrName.value' \
             --output tsv \
             --verbose)
