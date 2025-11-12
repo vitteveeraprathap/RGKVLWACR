@@ -4,16 +4,25 @@ on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
 
+# give GITHUB_TOKEN permission to request reviewers
+permissions:
+  pull-requests: write
+  contents: read
+
 jobs:
   assign-reviewers:
     runs-on: ubuntu-latest
-
     steps:
+      - name: Debug print event info
+        run: |
+          echo "PR base: ${{ github.event.pull_request.base.ref }}"
+          echo "PR head: ${{ github.event.pull_request.head.ref }}"
       - name: Assign reviewers automatically
         uses: peter-evans/request-review@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # exact github logins, comma-separated, no spaces
           reviewers: ${{ 
-            github.event.pull_request.base.ref == 'develop' && 'PriyankaGajjala,SreeDevopsNihi' ||
-            github.event.pull_request.base.ref == 'master' && 'SreeDevopsNihi,vinodmk23j' || ''
+            github.event.pull_request.base.ref == 'develop' && 'PriyaGajjala,SreeDevopsNihi' ||
+            github.event.pull_request.base.ref == 'master'  && 'SreeDevopsNihi,vinodmk23j' || ''
           }}
