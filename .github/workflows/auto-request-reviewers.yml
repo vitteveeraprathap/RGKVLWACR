@@ -1,0 +1,19 @@
+name: Auto Request Reviewers by Target Branch
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+jobs:
+  assign-reviewers:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Assign reviewers automatically
+        uses: peter-evans/request-review@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          reviewers: ${{ 
+            github.event.pull_request.base.ref == 'develop' && 'PriyankaGajjala,SreeDevopsNihi' ||
+            github.event.pull_request.base.ref == 'master' && 'SreeDevopsNihi,vinodmk23j' || ''
+          }}
