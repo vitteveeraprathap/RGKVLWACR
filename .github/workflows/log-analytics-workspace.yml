@@ -1,5 +1,4 @@
 name: Deploy Log Analytics Workspace
-
 on:
   workflow_dispatch:
     inputs:
@@ -15,7 +14,58 @@ on:
         default: dev
 
 jobs:
+  validate-branch:
+    runs-on: ubuntu-latest
+    outputs:
+      is_valid: ${{ steps.check.outputs.is_valid }}
+    steps:
+      - name: Validate Branch and Environment
+        id: check
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          ENV="${{ github.event.inputs.environment }}"
+          
+          echo "Current branch: $BRANCH"
+          echo "Requested environment: $ENV"
+          
+          # Feature branches (feature/se-*) can only deploy to dev or sbx
+          if [[ "$BRANCH" == feature/se-* ]]; then
+            if [[ "$ENV" == "dev" || "$ENV" == "sbx" ]]; then
+              echo "Feature branch can deploy to dev/sbx"
+              echo "is_valid=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Feature branches can only deploy to dev or sbx environments"
+              echo "is_valid=false" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+          # Develop branch can only deploy to uat
+          elif [[ "$BRANCH" == "develop" ]]; then
+            if [[ "$ENV" == "uat" ]]; then
+              echo "Develop branch can deploy to uat"
+              echo "is_valid=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Develop branch can only deploy to uat environment"
+              echo "is_valid=false" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+          # Master branch can only deploy to prd
+          elif [[ "$BRANCH" == "master" || "$BRANCH" == "main" ]]; then
+            if [[ "$ENV" == "prd" ]]; then
+              echo "Master branch can deploy to prd"
+              echo "is_valid=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Master branch can only deploy to prd environment"
+              echo "is_valid=false" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+          else
+            echo "Unknown branch pattern: $BRANCH"
+            echo "is_valid=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
   deploy-log-analytics:
+    needs: validate-branch
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
     steps:
@@ -25,7 +75,7 @@ jobs:
       - name: Azure login
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          creds: ${{ github.event.inputs.environment == 'dev' && secrets.AZURE_CREDENTIALS_DEV || github.event.inputs.environment == 'uat' && secrets.AZURE_CREDENTIALS_UAT || github.event.inputs.environment == 'sbx' && secrets.AZURE_CREDENTIALS_SBX || secrets.AZURE_CREDENTIALS_PRD }}
       
       - name: Determine Resource Group name
         id: set-rg
@@ -44,14 +94,40 @@ jobs:
           echo "Deploying to Resource Group: $RG_NAME"
         shell: bash
       
+      - name: Bicep Lint
+        run: |
+          echo "::group::Running Bicep Linter"
+          az bicep lint --file infra/log-analytics-workspace-creation/log-analytics-workspace.bicep
+          echo "::endgroup::"
+      
       - name: Validate Bicep template
         run: |
-          az bicep build --file infra/log-analytics-workspace/log-analytics-workspace.bicep
+          echo "::group::Building Bicep Template"
+          az bicep build --file infra/log-analytics-workspace-creation/log-analytics-workspace.bicep
+          echo "::endgroup::"
+      
+      - name: What-If Analysis
+        run: |
+          echo "::group::Running What-If Analysis"
+          az deployment group what-if \
+            --resource-group "${{ steps.set-rg.outputs.rgName }}" \
+            --template-file infra/log-analytics-workspace-creation/log-analytics-workspace.bicep \
+            --parameters @"infra/log-analytics-workspace-creation/log-analytics-workspace-${{ github.event.inputs.environment }}.parameters.json" \
+            --result-format FullResourcePayloads
+          echo "::endgroup::"
       
       - name: Deploy Log Analytics Workspace
+        id: deploy-law
         run: |
-          az deployment group create \
+          echo "::group::Deploying Log Analytics Workspace"
+          DEPLOYMENT_OUTPUT=$(az deployment group create \
             --resource-group "${{ steps.set-rg.outputs.rgName }}" \
-            --template-file infra/log-analytics-workspace/log-analytics-workspace.bicep \
-            --parameters @"infra/log-analytics-workspace/log-analytics-workspace-${{ github.event.inputs.environment }}.parameters.json" \
-            --verbose
+            --template-file infra/log-analytics-workspace-creation/log-analytics-workspace.bicep \
+            --parameters @"infra/log-analytics-workspace-creation/log-analytics-workspace-${{ github.event.inputs.environment }}.parameters.json" \
+            --query 'properties.outputs.logAnalyticsName.value' \
+            --output tsv \
+            --verbose)
+          
+          echo "lawName=$DEPLOYMENT_OUTPUT" >> "$GITHUB_OUTPUT"
+          echo "Log Analytics Workspace deployed: $DEPLOYMENT_OUTPUT"
+          echo "::endgroup::"
