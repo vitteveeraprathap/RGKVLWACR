@@ -15,7 +15,7 @@
       "value": {
         "name": "law-btt-dev-wus2-001",
         "environment": "development",
-        "department": "ntt gdc architecture",
+        "department": "btt gdc architecture",
         "cost-center": "510",
         "technical-manager": "veera",
         "application": "btt"
