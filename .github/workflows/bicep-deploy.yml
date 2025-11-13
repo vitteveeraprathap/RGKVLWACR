@@ -60,21 +60,21 @@ jobs:
         run: |
           SCOPE="${{ inputs.deployment_scope }}"
           if [[ "$SCOPE" != "group" && "$SCOPE" != "sub" ]]; then
-            echo "Invalid deployment scope: $SCOPE"
+            echo "❌ Invalid deployment scope: $SCOPE"
             echo "Valid values are: 'group' or 'sub'"
             exit 1
           fi
-          echo "Deployment scope validated: $SCOPE"
+          echo "✅ Deployment scope validated: $SCOPE"
       
       - name: Validate resource group for group scope
         if: inputs.deployment_scope == 'group'
         run: |
           RG_NAME="${{ secrets.resource_group_name }}"
           if [ -z "$RG_NAME" ]; then
-            echo "Resource group name is required for group scope deployments"
+            echo "❌ Resource group name is required for group scope deployments"
             exit 1
           fi
-          echo "Resource group validated: $RG_NAME"
+          echo "✅ Resource group validated: $RG_NAME"
       
       - name: Deploy (Group Scope)
         if: inputs.deployment_scope == 'group'
@@ -90,7 +90,7 @@ jobs:
               --output tsv \
               --verbose)
             echo "result=$DEPLOYMENT_OUTPUT" >> "$GITHUB_OUTPUT"
-            echo "Deployment output: $DEPLOYMENT_OUTPUT"
+            echo "✅ Deployment output: $DEPLOYMENT_OUTPUT"
           else
             az deployment group create \
               --resource-group "${{ secrets.resource_group_name }}" \
@@ -98,7 +98,7 @@ jobs:
               --parameters @"${{ inputs.parameters_file }}" \
               --verbose
             echo "result=" >> "$GITHUB_OUTPUT"
-            echo " Deployment completed (no output query specified)"
+            echo "✅ Deployment completed (no output query specified)"
           fi
           echo "::endgroup::"
       
@@ -116,7 +116,7 @@ jobs:
               --output tsv \
               --verbose)
             echo "result=$DEPLOYMENT_OUTPUT" >> "$GITHUB_OUTPUT"
-            echo "Deployment output: $DEPLOYMENT_OUTPUT"
+            echo "✅ Deployment output: $DEPLOYMENT_OUTPUT"
           else
             az deployment sub create \
               --location ${{ inputs.deployment_location }} \
@@ -124,7 +124,7 @@ jobs:
               --parameters @"${{ inputs.parameters_file }}" \
               --verbose
             echo "result=" >> "$GITHUB_OUTPUT"
-            echo "Deployment completed (no output query specified)"
+            echo "✅ Deployment completed (no output query specified)"
           fi
           echo "::endgroup::"
       
@@ -159,5 +159,5 @@ jobs:
             echo "Output: ${{ steps.set-output.outputs.result }}"
           fi
           echo "=========================================="
-          echo "Deployment completed successfully"
+          echo "✅ Deployment completed successfully"
           echo "::endgroup::"
