@@ -1,0 +1,37 @@
+name: PR Branch Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  validate-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR branches
+        run: |
+          SOURCE="${{ github.head_ref }}"
+          TARGET="${{ github.base_ref }}"
+          
+          echo "Source: $SOURCE → Target: $TARGET"
+          
+          # Validate develop → master
+          if [[ "$TARGET" == "master" ]]; then
+            if [[ "$SOURCE" != "develop" ]]; then
+              echo "❌ Only 'develop' can merge into 'master'"
+              exit 1
+            fi
+            echo "✅ Valid: develop → master"
+          
+          # Validate feature → develop
+          elif [[ "$TARGET" == "develop" ]]; then
+            if [[ ! "$SOURCE" =~ ^feature/se-[A-Za-z0-9._-]+$ ]]; then
+              echo "❌ Only 'feature/se-{JIRAID}' branches can merge into 'develop'"
+              echo "Example: feature/se-ABC-123"
+              exit 1
+            fi
+            echo "✅ Valid: $SOURCE → develop"
+          
+          else
+            echo "⚠️  Merging to '$TARGET' - ensure this is intended"
+          fi
