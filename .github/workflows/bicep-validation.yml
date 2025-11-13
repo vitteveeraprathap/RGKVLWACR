@@ -1,0 +1,45 @@
+name: Bicep Validation
+
+on:
+  workflow_call:
+    inputs:
+      bicep_file:
+        required: true
+        type: string
+      parameters_file:
+        required: true
+        type: string
+    secrets:
+      azure_credentials:
+        required: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.azure_credentials }}
+      
+      - name: Bicep Build
+        run: |
+          echo "Building Bicep template..."
+          az bicep build --file ${{ inputs.bicep_file }}
+          echo "✅ Bicep build successful"
+      
+      - name: Bicep Lint
+        run: |
+          echo "Linting Bicep template..."
+          az bicep lint --file ${{ inputs.bicep_file }}
+          echo "✅ Bicep lint successful"
+      
+      - name: Validate Parameters File
+        run: |
+          if [ ! -f "${{ inputs.parameters_file }}" ]; then
+            echo "❌ Parameters file not found: ${{ inputs.parameters_file }}"
+            exit 1
+          fi
+          echo "✅ Parameters file exists"
