@@ -1,0 +1,151 @@
+name: Bicep Deployment
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: string
+      bicep_file:
+        description: 'Path to Bicep template file'
+        required: true
+        type: string
+      parameters_file:
+        description: 'Path to parameters file'
+        required: true
+        type: string
+      deployment_scope:
+        description: 'Deployment scope (group or sub)'
+        required: false
+        type: string
+        default: 'group'
+      deployment_location:
+        description: 'Location for subscription deployments'
+        required: false
+        type: string
+        default: 'westus2'
+      output_query:
+        description: 'JMESPath query for deployment output'
+        required: false
+        type: string
+        default: ''
+    outputs:
+      deployment_output:
+        description: 'Output from the deployment'
+        value: ${{ jobs.deploy.outputs.deployment_output }}
+    secrets:
+      azure_credentials:
+        description: 'Azure service principal credentials'
+        required: true
+      resource_group_name:
+        description: 'Resource group name (required for group scope)'
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      deployment_output: ${{ steps.deploy.outputs.result }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.azure_credentials }}
+      
+      - name: Bicep Lint
+        run: |
+          echo "::group::Running Bicep Linter"
+          az bicep lint --file ${{ inputs.bicep_file }}
+          echo "::endgroup::"
+      
+      - name: Validate Bicep template
+        run: |
+          echo "::group::Building Bicep Template"
+          az bicep build --file ${{ inputs.bicep_file }}
+          echo "::endgroup::"
+      
+      - name: What-If Analysis (Group Scope)
+        if: inputs.deployment_scope == 'group'
+        run: |
+          echo "::group::Running What-If Analysis"
+          az deployment group what-if \
+            --resource-group "${{ secrets.resource_group_name }}" \
+            --template-file ${{ inputs.bicep_file }} \
+            --parameters @"${{ inputs.parameters_file }}" \
+            --result-format FullResourcePayloads
+          echo "::endgroup::"
+      
+      - name: What-If Analysis (Subscription Scope)
+        if: inputs.deployment_scope == 'sub'
+        run: |
+          echo "::group::Running What-If Analysis"
+          az deployment sub what-if \
+            --location ${{ inputs.deployment_location }} \
+            --template-file ${{ inputs.bicep_file }} \
+            --parameters @"${{ inputs.parameters_file }}" \
+            --result-format FullResourcePayloads
+          echo "::endgroup::"
+      
+      - name: Deploy (Group Scope)
+        if: inputs.deployment_scope == 'group'
+        id: deploy-group
+        run: |
+          echo "::group::Deploying to Resource Group"
+          if [ -n "${{ inputs.output_query }}" ]; then
+            DEPLOYMENT_OUTPUT=$(az deployment group create \
+              --resource-group "${{ secrets.resource_group_name }}" \
+              --template-file ${{ inputs.bicep_file }} \
+              --parameters @"${{ inputs.parameters_file }}" \
+              --query '${{ inputs.output_query }}' \
+              --output tsv \
+              --verbose)
+            echo "result=$DEPLOYMENT_OUTPUT" >> "$GITHUB_OUTPUT"
+            echo "Deployment output: $DEPLOYMENT_OUTPUT"
+          else
+            az deployment group create \
+              --resource-group "${{ secrets.resource_group_name }}" \
+              --template-file ${{ inputs.bicep_file }} \
+              --parameters @"${{ inputs.parameters_file }}" \
+              --verbose
+            echo "Deployment completed"
+          fi
+          echo "::endgroup::"
+      
+      - name: Deploy (Subscription Scope)
+        if: inputs.deployment_scope == 'sub'
+        id: deploy-sub
+        run: |
+          echo "::group::Deploying to Subscription"
+          if [ -n "${{ inputs.output_query }}" ]; then
+            DEPLOYMENT_OUTPUT=$(az deployment sub create \
+              --location ${{ inputs.deployment_location }} \
+              --template-file ${{ inputs.bicep_file }} \
+              --parameters @"${{ inputs.parameters_file }}" \
+              --query '${{ inputs.output_query }}' \
+              --output tsv \
+              --verbose)
+            echo "result=$DEPLOYMENT_OUTPUT" >> "$GITHUB_OUTPUT"
+            echo "Deployment output: $DEPLOYMENT_OUTPUT"
+          else
+            az deployment sub create \
+              --location ${{ inputs.deployment_location }} \
+              --template-file ${{ inputs.bicep_file }} \
+              --parameters @"${{ inputs.parameters_file }}" \
+              --verbose
+            echo "Deployment completed"
+          fi
+          echo "::endgroup::"
+      
+      - name: Set deployment output
+        id: deploy
+        run: |
+          if [ "${{ inputs.deployment_scope }}" == "group" ]; then
+            echo "result=${{ steps.deploy-group.outputs.result }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=${{ steps.deploy-sub.outputs.result }}" >> "$GITHUB_OUTPUT"
+          fi
