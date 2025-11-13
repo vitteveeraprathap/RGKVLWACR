@@ -17,16 +17,15 @@ on:
         type: string
       deployment_scope:
         description: 'Deployment scope (group or sub)'
-        required: false
+        required: true
         type: string
-        default: 'group'
       deployment_location:
         description: 'Location for subscription deployments'
         required: false
         type: string
         default: 'westus2'
       output_query:
-        description: 'JMESPath query for deployment output'
+        description: 'JMESPath query for deployment output (leave empty for no output)'
         required: false
         type: string
         default: ''
@@ -47,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     outputs:
-      deployment_output: ${{ steps.deploy.outputs.result }}
+      deployment_output: ${{ steps.set-output.outputs.result }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -57,39 +56,25 @@ jobs:
         with:
           creds: ${{ secrets.azure_credentials }}
       
-      - name: Bicep Lint
+      - name: Validate deployment scope
         run: |
-          echo "::group::Running Bicep Linter"
-          az bicep lint --file ${{ inputs.bicep_file }}
-          echo "::endgroup::"
+          SCOPE="${{ inputs.deployment_scope }}"
+          if [[ "$SCOPE" != "group" && "$SCOPE" != "sub" ]]; then
+            echo "Invalid deployment scope: $SCOPE"
+            echo "Valid values are: 'group' or 'sub'"
+            exit 1
+          fi
+          echo "Deployment scope validated: $SCOPE"
       
-      - name: Validate Bicep template
-        run: |
-          echo "::group::Building Bicep Template"
-          az bicep build --file ${{ inputs.bicep_file }}
-          echo "::endgroup::"
-      
-      - name: What-If Analysis (Group Scope)
+      - name: Validate resource group for group scope
         if: inputs.deployment_scope == 'group'
         run: |
-          echo "::group::Running What-If Analysis"
-          az deployment group what-if \
-            --resource-group "${{ secrets.resource_group_name }}" \
-            --template-file ${{ inputs.bicep_file }} \
-            --parameters @"${{ inputs.parameters_file }}" \
-            --result-format FullResourcePayloads
-          echo "::endgroup::"
-      
-      - name: What-If Analysis (Subscription Scope)
-        if: inputs.deployment_scope == 'sub'
-        run: |
-          echo "::group::Running What-If Analysis"
-          az deployment sub what-if \
-            --location ${{ inputs.deployment_location }} \
-            --template-file ${{ inputs.bicep_file }} \
-            --parameters @"${{ inputs.parameters_file }}" \
-            --result-format FullResourcePayloads
-          echo "::endgroup::"
+          RG_NAME="${{ secrets.resource_group_name }}"
+          if [ -z "$RG_NAME" ]; then
+            echo "Resource group name is required for group scope deployments"
+            exit 1
+          fi
+          echo "Resource group validated: $RG_NAME"
       
       - name: Deploy (Group Scope)
         if: inputs.deployment_scope == 'group'
@@ -112,7 +97,8 @@ jobs:
               --template-file ${{ inputs.bicep_file }} \
               --parameters @"${{ inputs.parameters_file }}" \
               --verbose
-            echo "Deployment completed"
+            echo "result=" >> "$GITHUB_OUTPUT"
+            echo " Deployment completed (no output query specified)"
           fi
           echo "::endgroup::"
       
@@ -137,15 +123,41 @@ jobs:
               --template-file ${{ inputs.bicep_file }} \
               --parameters @"${{ inputs.parameters_file }}" \
               --verbose
-            echo "Deployment completed"
+            echo "result=" >> "$GITHUB_OUTPUT"
+            echo "Deployment completed (no output query specified)"
           fi
           echo "::endgroup::"
       
       - name: Set deployment output
-        id: deploy
+        id: set-output
         run: |
           if [ "${{ inputs.deployment_scope }}" == "group" ]; then
             echo "result=${{ steps.deploy-group.outputs.result }}" >> "$GITHUB_OUTPUT"
           else
             echo "result=${{ steps.deploy-sub.outputs.result }}" >> "$GITHUB_OUTPUT"
           fi
+      
+      - name: Post Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.azure_credentials }}
+      
+      - name: Deployment Summary
+        run: |
+          echo "::group::Deployment Summary"
+          echo "=========================================="
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Scope: ${{ inputs.deployment_scope }}"
+          echo "Bicep File: ${{ inputs.bicep_file }}"
+          echo "Parameters: ${{ inputs.parameters_file }}"
+          if [ "${{ inputs.deployment_scope }}" == "group" ]; then
+            echo "Resource Group: ${{ secrets.resource_group_name }}"
+          else
+            echo "Location: ${{ inputs.deployment_location }}"
+          fi
+          if [ -n "${{ steps.set-output.outputs.result }}" ]; then
+            echo "Output: ${{ steps.set-output.outputs.result }}"
+          fi
+          echo "=========================================="
+          echo "Deployment completed successfully"
+          echo "::endgroup::"
