@@ -3,13 +3,13 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "keyVaultName": {
-      "value": "kv-btt-sbx-wus2-001"
+      "value": "kv-btt-sbx-wus2-004"
     },
     "location": {
       "value": "westus2"
     },
     "adminObjectId": {
-      "value": "499942b8-ec43-4c66-8e3d-4255cff11553"
+      "value": "62d28f57-80f0-45e6-aee7-b21edfc15caf"
     },
     "logAnalyticsName": {
       "value": "law-btt-sbx-wus2-001"
