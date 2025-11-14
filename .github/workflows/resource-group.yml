@@ -1,4 +1,5 @@
-name: Deploy Resource Group BTT
+name: Deploy Resource Group
+
 on:
   workflow_dispatch:
     inputs:
@@ -15,102 +16,20 @@ on:
 
 jobs:
   validate-branch:
-    runs-on: ubuntu-latest
-    outputs:
-      is_valid: ${{ steps.check.outputs.is_valid }}
-    steps:
-      - name: Validate Branch and Environment
-        id: check
-        run: |
-          BRANCH="${{ github.ref_name }}"
-          ENV="${{ github.event.inputs.environment }}"
-          
-          echo "Current branch: $BRANCH"
-          echo "Requested environment: $ENV"
-          
-          # Feature branches (feature/se-*) can only deploy to dev or sbx
-          if [[ "$BRANCH" == feature/se-* ]]; then
-            if [[ "$ENV" == "dev" || "$ENV" == "sbx" ]]; then
-              echo "Feature branch can deploy to dev/sbx"
-              echo "is_valid=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "Feature branches can only deploy to dev or sbx environments"
-              echo "is_valid=false" >> "$GITHUB_OUTPUT"
-              exit 1
-            fi
-          # Develop branch can only deploy to uat
-          elif [[ "$BRANCH" == "develop" ]]; then
-            if [[ "$ENV" == "uat" ]]; then
-              echo "Develop branch can deploy to uat"
-              echo "is_valid=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "Develop branch can only deploy to uat environment"
-              echo "is_valid=false" >> "$GITHUB_OUTPUT"
-              exit 1
-            fi
-          # Master branch can only deploy to prd
-          elif [[ "$BRANCH" == "master" || "$BRANCH" == "main" ]]; then
-            if [[ "$ENV" == "prd" ]]; then
-              echo "Master branch can deploy to prd"
-              echo "is_valid=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "Master branch can only deploy to prd environment"
-              echo "is_valid=false" >> "$GITHUB_OUTPUT"
-              exit 1
-            fi
-          else
-            echo "Unknown branch pattern: $BRANCH"
-            echo "is_valid=false" >> "$GITHUB_OUTPUT"
-            exit 1
-          fi
+    uses: ./.github/workflows/validate-branch.yml
+    with:
+      environment: ${{ github.event.inputs.environment }}
 
   deploy-resource-group:
     needs: validate-branch
-    runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      
-      - name: Azure login
-        uses: azure/login@v2
-        with:
-          creds: ${{ github.event.inputs.environment == 'dev' && secrets.AZURE_CREDENTIALS_DEV || github.event.inputs.environment == 'uat' && secrets.AZURE_CREDENTIALS_UAT || github.event.inputs.environment == 'sbx' && secrets.AZURE_CREDENTIALS_SBX || secrets.AZURE_CREDENTIALS_PRD }}
-      
-      - name: Bicep Lint
-        run: |
-          echo "::group::Running Bicep Linter"
-          az bicep lint --file infra/resource-group-creation/resource-group.bicep
-          echo "::endgroup::"
-      
-      - name: Validate Bicep template
-        run: |
-          echo "::group::Building Bicep Template"
-          az bicep build --file infra/resource-group-creation/resource-group.bicep
-          echo "::endgroup::"
-      
-      - name: What-If Analysis
-        run: |
-          echo "::group::Running What-If Analysis"
-          az deployment sub what-if \
-            --location westus2 \
-            --template-file infra/resource-group-creation/resource-group.bicep \
-            --parameters @"infra/resource-group-creation/resource-group-${{ github.event.inputs.environment }}.parameters.json" \
-            --result-format FullResourcePayloads
-          echo "::endgroup::"
-      
-      - name: Deploy Resource Group
-        id: deploy-rg
-        run: |
-          echo "::group::Deploying Resource Group"
-          DEPLOYMENT_OUTPUT=$(az deployment sub create \
-            --location westus2 \
-            --template-file infra/resource-group-creation/resource-group.bicep \
-            --parameters @"infra/resource-group-creation/resource-group-${{ github.event.inputs.environment }}.parameters.json" \
-            --query 'properties.outputs.resourceGroupName.value' \
-            --output tsv \
-            --verbose)
-          
-          echo "resourceGroupName=$DEPLOYMENT_OUTPUT" >> "$GITHUB_OUTPUT"
-          echo "Resource Group deployed: $DEPLOYMENT_OUTPUT"
-          echo "::endgroup::"
+    uses: ./.github/workflows/bicep-deploy.yml
+    with:
+      environment: ${{ github.event.inputs.environment }}
+      bicep_file: 'infra/resource-group-creation/resource-group.bicep'
+      parameters_file: 'infra/resource-group-creation/resource-group-${{ github.event.inputs.environment }}.parameters.json'
+      deployment_scope: 'sub'
+      deployment_location: 'westus2'
+      output_query: 'properties.outputs.resourceGroupName.value'
+    secrets:
+      azure_credentials: ${{ github.event.inputs.environment == 'dev' && secrets.AZURE_CREDENTIALS_DEV || github.event.inputs.environment == 'uat' && secrets.AZURE_CREDENTIALS_UAT || github.event.inputs.environment == 'sbx' && secrets.AZURE_CREDENTIALS_SBX || secrets.AZURE_CREDENTIALS_PRD }}
+      resource_group_name: ''
