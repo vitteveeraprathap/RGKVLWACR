@@ -1,5 +1,6 @@
-name: Auto Request Reviewers by Target Branch (safe)
+name: Auto Request Reviewers (REST API fallback)
 
+# Use pull_request_target so this runs in the target repo context (can write reviewers even for fork PRs).
 on:
   pull_request_target:
     types: [opened, reopened, ready_for_review, synchronize]
@@ -11,28 +12,68 @@ permissions:
 jobs:
   assign-reviewers:
     runs-on: ubuntu-latest
-    # SECURITY: do NOT checkout PR code here (we only use the event).
+    # SECURITY: Do NOT checkout PR code here; we only use the event payload.
     steps:
-      - name: Debug print event info
+      - name: Debug event payload
         run: |
-          echo "PR base branch: ${{ github.event.pull_request.base.ref }}"
-          echo "PR head branch: ${{ github.event.pull_request.head.ref }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "PR number: ${{ github.event.pull_request.number }}"
+          echo "PR base:   ${{ github.event.pull_request.base.ref }}"
+          echo "PR head:   ${{ github.event.pull_request.head.ref }}"
           echo "PR author: ${{ github.event.pull_request.user.login }}"
 
-      - name: Assign reviewers for develop
+      - name: Assign reviewers for develop (REST API)
         if: ${{ github.event.pull_request.base.ref == 'develop' }}
-        uses: peter-evans/request-review@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          reviewers: 'PriyaGajjala,SreeDevopsNihi'
+        env:
+          GITHUB_API: https://api.github.com
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Set the GitHub usernames you want to request (JSON array)
+          REVIEWERS='["PriyaGajjala","SreeDevopsNihi"]'
 
-      - name: Assign reviewers for master
+          echo "Requesting reviewers: $REVIEWERS for PR #$PR_NUMBER"
+          http_code=$(curl -s -o /tmp/resp -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API/repos/$OWNER/$REPO/pulls/$PR_NUMBER/requested_reviewers" \
+            -d "{\"reviewers\": $REVIEWERS}")
+
+          cat /tmp/resp || true
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            echo "✅ Reviewers requested (HTTP $http_code)"
+          else
+            echo "❌ Request failed with HTTP $http_code"
+            exit 1
+          fi
+
+      - name: Assign reviewers for master (REST API)
         if: ${{ github.event.pull_request.base.ref == 'master' }}
-        uses: peter-evans/request-review@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          reviewers: 'SreeDevopsNihi,vinodmk23j'
+        env:
+          GITHUB_API: https://api.github.com
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REVIEWERS='["SreeDevopsNihi","vinodmk23j"]'
+          echo "Requesting reviewers: $REVIEWERS for PR #$PR_NUMBER"
+          http_code=$(curl -s -o /tmp/resp -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API/repos/$OWNER/$REPO/pulls/$PR_NUMBER/requested_reviewers" \
+            -d "{\"reviewers\": $REVIEWERS}")
 
-      - name: No automatic reviewers (other branches)
+          cat /tmp/resp || true
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            echo "✅ Reviewers requested (HTTP $http_code)"
+          else
+            echo "❌ Request failed with HTTP $http_code"
+            exit 1
+          fi
+
+      - name: No auto reviewers configured
         if: ${{ github.event.pull_request.base.ref != 'develop' && github.event.pull_request.base.ref != 'master' }}
-        run: echo "No auto-reviewers configured for branch '${{ github.event.pull_request.base.ref }}'"
+        run: echo "No auto-reviewers configured for branch '${{ github.event.pull_request.base.ref }}'."
