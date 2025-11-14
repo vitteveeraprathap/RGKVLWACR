@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "keyVaultName": {
-      "value": "kv-btt-sbx-wus2-004"
+      "value": "kv-btt-sbx-wus2-005"
     },
     "location": {
       "value": "westus2"
