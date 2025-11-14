@@ -1,28 +1,38 @@
-name: Auto Request Reviewers by Target Branch
+name: Auto Request Reviewers by Target Branch (safe)
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, ready_for_review, synchronize]
 
 permissions:
-  pull-requests: write
   contents: read
+  pull-requests: write
 
 jobs:
   assign-reviewers:
     runs-on: ubuntu-latest
-
+    # SECURITY: do NOT checkout PR code here (we only use the event payload).
     steps:
       - name: Debug print event info
         run: |
           echo "PR base branch: ${{ github.event.pull_request.base.ref }}"
           echo "PR head branch: ${{ github.event.pull_request.head.ref }}"
+          echo "PR author: ${{ github.event.pull_request.user.login }}"
 
-      - name: Assign reviewers automatically
+      - name: Assign reviewers for develop
+        if: ${{ github.event.pull_request.base.ref == 'develop' }}
         uses: peter-evans/request-review@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          reviewers: ${{ 
-            github.event.pull_request.base.ref == 'develop' && 'PriyaGajjala,SreeDevopsNihi' ||
-            github.event.pull_request.base.ref == 'master'  && 'SreeDevopsNihi,vinodmk23j' || ''
-          }}
+          reviewers: 'PriyaGajjala,SreeDevopsNihi'
+
+      - name: Assign reviewers for master
+        if: ${{ github.event.pull_request.base.ref == 'master' }}
+        uses: peter-evans/request-review@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          reviewers: 'SreeDevopsNihi,vinodmk23j'
+
+      - name: No automatic reviewers (other branches)
+        if: ${{ github.event.pull_request.base.ref != 'develop' && github.event.pull_request.base.ref != 'master' }}
+        run: echo "No auto-reviewers configured for branch '${{ github.event.pull_request.base.ref }}'"
