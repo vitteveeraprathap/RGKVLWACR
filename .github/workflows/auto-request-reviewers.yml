@@ -11,7 +11,7 @@ permissions:
 jobs:
   assign-reviewers:
     runs-on: ubuntu-latest
-    # SECURITY: do NOT checkout PR code here (we only use the event payload).
+    # SECURITY: do NOT checkout PR code here (we only use the event).
     steps:
       - name: Debug print event info
         run: |
